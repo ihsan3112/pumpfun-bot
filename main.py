@@ -1,4 +1,4 @@
-import request
+import requests
 import json
 import time
 from solana.rpc.api import Client 
