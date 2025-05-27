@@ -1,2 +1,2 @@
-solana==0.30.3
+solana==0.27.0
 requests
