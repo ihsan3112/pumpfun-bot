@@ -19,7 +19,7 @@ JUPITER_PRICE_API = "https://price.jup.ag/v4/price?ids="
 # === LOAD WALLET ===
 with open("my-autobuy-wallet.json", "r") as f:
     key = json.load(f)
-    wallet = Keypair.from_bytes(bytes(key))
+    wallet = Keypair.from_secret_key(bytes(key))
     my_address = wallet.public_key
 
 client = Client(RPC)
