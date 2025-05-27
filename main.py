@@ -1,10 +1,8 @@
-
-import requests, time, json
-from solders.keypair import Keypair
-from solders.rpc.api import Client
-from solders.pubkey import Pubkey
-from solders.system_program import transfer, TransferParams
-from solders.transaction import Transaction
+from solana.rpc.api import Client
+from solana.keypair import Keypair
+from solana.publickey import PublicKey
+from solana.system_program import TransferParams, transfer
+from solana.transaction import Transaction
 from base64 import b64decode
 
 # === KONFIGURASI ===
@@ -19,7 +17,7 @@ JUPITER_PRICE_API = "https://price.jup.ag/v4/price?ids="
 with open("my-autobuy-wallet.json", "r") as f:
     key = json.load(f)
     wallet = Keypair.from_bytes(bytes(key))
-    my_address = wallet.pubkey()
+    my_address = wallet.public_key
 
 client = Client(RPC)
 sudah_beli = {}
