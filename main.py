@@ -85,8 +85,16 @@ while True:
     for token in tokens:
         token_id = token.get("id")
         token_mint = token.get("id")
+        buyer_count = token.get("buyerCount", 0)
+
         if token_id in sudah_beli:
             continue
+
+        # Filter hanya token dengan minimal 20 buyer
+        if buyer_count < 20:
+            print(f">> Skip {token_id} karena buyer kurang dari 20: {buyer_count}")
+            continue
+
         success = buy_token(token_id)
         if success:
             harga_awal = get_token_price(token_mint)
@@ -96,4 +104,5 @@ while True:
                 monitor_and_sell(token_id, harga_awal, token_mint, jumlah_token)
             else:
                 print(">> Gagal ambil harga awal")
-        time.sleep(15)
+    time.sleep(15)
+
