@@ -1,27 +1,29 @@
 import requests, json, time
-from solders.pubkey import Pubkey as PublicKey
+from solana.publickey import PublicKey
 from solana.rpc.api import Client
-from solders.keypair import Keypair
+from solana.keypair import Keypair
 from solana.transaction import Transaction
 from solana.rpc.types import TxOpts
-from solders.system_program import transfer, TransferParams
+from solana.system_program import TransferParams, transfer
 
+# ============ KONFIGURASI ============
 PUMPFUN_API = "https://api.pump.fun/markets/recent"
 JUPITER_PRICE_API = "https://price.jup.ag/v4/price?ids="
 RPC = "https://api.mainnet-beta.solana.com"
-
+BUY_AMOUNT_SOL = 0.03
 MIN_BUYER_COUNT = 1
-BUY_AMOUNT_SOL = 0.03  # jumlah pembelian
 SLIPPAGE = 0.2
+# ======================================
 
+# ============ LOAD WALLET ============
 with open("my-autobuy-wallet.json", "r") as f:
     key = json.load(f)
     wallet = Keypair.from_secret_key(bytes(key))
-    my_address = wallet.pubkey()
-
+    my_address = wallet.public_key
 client = Client(RPC)
 sudah_beli = []
 
+# ============ FUNGSI AMBIL TOKEN BARU ============
 def get_recent_tokens():
     try:
         res = requests.get(PUMPFUN_API).json()
@@ -29,6 +31,7 @@ def get_recent_tokens():
     except:
         return []
 
+# ============ FUNGSI AMBIL HARGA DARI JUPITER ============
 def get_token_price(token_mint):
     try:
         url = f"{JUPITER_PRICE_API}{token_mint}"
@@ -37,19 +40,24 @@ def get_token_price(token_mint):
     except:
         return None
 
+# ============ FUNGSI BELI TOKEN (dummy transfer) ============
 def buy_token(token_address):
     print(f"[BUYING] Token: {token_address}")
-    # Logika dummy transfer agar mudah diuji (ganti dengan Jupiter TX real untuk live version)
     try:
-        tx = Transaction()
         lamports = int(BUY_AMOUNT_SOL * 1_000_000_000)
-        instr = transfer(TransferParams(from_pubkey=my_address, to_pubkey=my_address, lamports=lamports))
+        tx = Transaction()
+        instr = transfer(TransferParams(
+            from_pubkey=my_address,
+            to_pubkey=my_address,  # dummy: transfer ke wallet sendiri
+            lamports=lamports
+        ))
         tx.add(instr)
         response = client.send_transaction(tx, wallet, opts=TxOpts(skip_preflight=True, preflight_commitment="confirmed"))
-        print("[✅] Transaksi terkirim:", response)
+        print("[✅] Transaksi dummy terkirim:", response)
     except Exception as e:
-        print("[❌] Gagal kirim transaksi:", str(e))
+        print("[❌] Gagal transaksi:", str(e))
 
+# ============ LOOP UTAMA ============
 while True:
     print("🔄 Cek token baru...")
     tokens = get_recent_tokens()
@@ -65,6 +73,6 @@ while True:
                 buy_token(token_address)
                 sudah_beli.append(token_address)
             else:
-                print(f"⚠️ Tidak ada harga dari Jupiter untuk {token['name']}")
-    
+                print(f"⚠️ Harga tidak tersedia untuk {token['name']}")
+
     time.sleep(5)
