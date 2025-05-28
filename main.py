@@ -27,9 +27,15 @@ sudah_beli = []
 def get_recent_tokens():
     try:
         res = requests.get(PUMPFUN_API).json()
-        return res["markets"]
+        if isinstance(res, dict) and "markets" in res:
+            return res["markets"]
+        elif isinstance(res, list):
+            return res
+        else:
+            print("[❌] Format response tidak dikenal:", res)
+            return []
     except Exception as e:
-        print("[⚠️] Gagal ambil token:", e)
+        print("[⚠️] Error ambil token:", e)
         return []
 
 # === CEK HARGA TOKEN DI JUPITER ===
@@ -63,17 +69,19 @@ while True:
     tokens = get_recent_tokens()
 
     for token in tokens:
-        token_address = token["mint"]
+        token_address = token.get("mint")
+        token_name = token.get("name", "UNKNOWN")
         buyer_count = token.get("buyerCount", 0)
-        print(f"📦 Token: {token['name']} | Buyers: {buyer_count}")
 
-        if token_address not in sudah_beli and buyer_count >= MIN_BUYER_COUNT:
+        print(f"📦 Token: {token_name} | Buyers: {buyer_count}")
+
+        if token_address and token_address not in sudah_beli and buyer_count >= MIN_BUYER_COUNT:
             price = get_token_price(token_address)
             if price:
-                print(f"🚀 Beli Token: {token['name']} | Buyers: {buyer_count} | Harga: ${price}")
+                print(f"🚀 Beli Token: {token_name} | Buyers: {buyer_count} | Harga: ${price}")
                 buy_token(token_address)
                 sudah_beli.append(token_address)
             else:
-                print(f"⚠️ Harga tidak tersedia untuk {token['name']}")
+                print(f"⚠️ Harga tidak tersedia untuk {token_name}")
 
     time.sleep(5)
