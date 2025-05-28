@@ -1,32 +1,27 @@
-import requests
-import json
-import time
+import requests, json, time
+from solders.pubkey import Pubkey as PublicKey
 from solana.rpc.api import Client
-from solana.keypair import Keypair
-from solana.publickey import PublicKey
-from solana.system_program import TransferParams, transfer
+from solders.keypair import Keypair
 from solana.transaction import Transaction
-from base64 import b64decode
-
-# === KONFIGURASI ===
-BUY_AMOUNT_SOL = 0.07
-TAKE_PROFIT_MULTIPLIER = 2.0
-TRAILING_STOP_DROP = 0.3
+from solana.rpc.types import TxOpts
+from solders.system_program import transfer, TransferParams
 
 PUMPFUN_API = "https://api.pump.fun/markets/recent"
-RPC = "https://api.mainnet-beta.solana.com"
 JUPITER_PRICE_API = "https://price.jup.ag/v4/price?ids="
+RPC = "https://api.mainnet-beta.solana.com"
 
-# === LOAD WALLET ===
+MIN_BUYER_COUNT = 1
+BUY_AMOUNT_SOL = 0.03  # jumlah pembelian
+SLIPPAGE = 0.2
+
 with open("my-autobuy-wallet.json", "r") as f:
     key = json.load(f)
     wallet = Keypair.from_secret_key(bytes(key))
-    my_address = wallet.public_key
+    my_address = wallet.pubkey()
 
 client = Client(RPC)
-sudah_beli = {}
+sudah_beli = []
 
-# === AMBIL TOKEN BARU ===
 def get_recent_tokens():
     try:
         res = requests.get(PUMPFUN_API).json()
@@ -34,82 +29,42 @@ def get_recent_tokens():
     except:
         return []
 
-# === AMBIL HARGA TOKEN ===
 def get_token_price(token_mint):
     try:
-        res = requests.get(f"{JUPITER_PRICE_API}{token_mint}")
-        data = res.json()
-        return float(data['data'][token_mint]['price'])
+        url = f"{JUPITER_PRICE_API}{token_mint}"
+        res = requests.get(url).json()
+        return float(res['data'][token_mint]['price'])
     except:
         return None
 
-# === BELI TOKEN ===
 def buy_token(token_address):
+    print(f"[BUYING] Token: {token_address}")
+    # Logika dummy transfer agar mudah diuji (ganti dengan Jupiter TX real untuk live version)
     try:
-        to_pubkey = PublicKey(token_address[44:])  # potong 'mint:xxxxxx'
-        lamports = int(BUY_AMOUNT_SOL * 1_000_000_000)
         tx = Transaction()
-        instr = transfer(
-            TransferParams(
-                from_pubkey=my_address,
-                to_pubkey=to_pubkey,
-                lamports=lamports
-            )
-        )
+        lamports = int(BUY_AMOUNT_SOL * 1_000_000_000)
+        instr = transfer(TransferParams(from_pubkey=my_address, to_pubkey=my_address, lamports=lamports))
         tx.add(instr)
-        tx.sign(wallet)
-        resp = client.send_transaction(tx)
-        print(f"[BELI] Sukses beli token: {token_address}")
-        print("Link:", f"https://solscan.io/tx/{resp.value}")
-        return True
+        response = client.send_transaction(tx, wallet, opts=TxOpts(skip_preflight=True, preflight_commitment="confirmed"))
+        print("[✅] Transaksi terkirim:", response)
     except Exception as e:
-        print(f"[BELI] Gagal beli token: {token_address}")
-        print("Error:", e)
-        return False
+        print("[❌] Gagal kirim transaksi:", str(e))
 
-# === MONITOR DAN JUAL ===
-def monitor_and_sell(token_id, harga_beli, token_mint, jumlah_token):
-    harga_puncak = harga_beli
-    while True:
-        harga_skrg = get_token_price(token_mint)
-        if not harga_skrg:
-            time.sleep(15)
-            continue
-
-        if harga_skrg > harga_puncak:
-            harga_puncak = harga_skrg
-
-        if harga_skrg <= harga_puncak * (1 - TRAILING_STOP_DROP):
-            print(f"TRAILING STOP TERPICU >> Jual token {token_id}")
-            break
-
-        print(f"[MONITOR] {token_id} | Sekarang: {harga_skrg:.4f} | Tertinggi: {harga_puncak:.4f}")
-        time.sleep(15)
-
-# === LOOP UTAMA ===
 while True:
-    print("Cek token baru...")
+    print("🔄 Cek token baru...")
     tokens = get_recent_tokens()
+
     for token in tokens:
-        token_id = token.get("id")
-        token_mint = token.get("id")
+        token_address = token["mint"]
         buyer_count = token.get("buyerCount", 0)
 
-        if token_id in sudah_beli:
-            continue
-
-        # Filter minimal 20 buyer
-        if buyer_count < 20:
-            print(f">> Skip {token_id} karena buyer kurang dari 20: {buyer_count}")
-            continue
-
-        success = buy_token(token_id)
-        if success:
-            harga_awal = get_token_price(token_mint)
-            if harga_awal:
-                sudah_beli[token_id] = True
-                jumlah_token = 1000000  # dummy
-                monitor_and_sell(token_id, harga_awal, token_mint, jumlah_token)
+        if token_address not in sudah_beli and buyer_count >= MIN_BUYER_COUNT:
+            price = get_token_price(token_address)
+            if price:
+                print(f"🚀 Token Baru: {token['name']} | Buyers: {buyer_count} | Harga: ${price}")
+                buy_token(token_address)
+                sudah_beli.append(token_address)
             else:
-                print(">> Gagal ambil harga awal")
-    time.sleep(15)
+                print(f"⚠️ Tidak ada harga dari Jupiter untuk {token['name']}")
+    
+    time.sleep(5)
