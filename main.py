@@ -7,12 +7,16 @@ from solana.rpc.types import TxOpts
 from solana.system_program import TransferParams, transfer
 
 # === KONFIGURASI ===
-PUMPFUN_API = "https://pump.fun/api/markets/recent"  # ✅ endpoint benar
+PUMPFUN_API = "https://pump.fun/api/markets/recent"
 JUPITER_API = "https://price.jup.ag/v4/price?ids="
 RPC = "https://api.mainnet-beta.solana.com"
 BUY_AMOUNT_SOL = 0.03
 MIN_BUYER_COUNT = 1
 SLIPPAGE = 0.2
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 # === LOAD WALLET ===
 with open("my-autobuy-wallet.json", "r") as f:
@@ -26,8 +30,13 @@ sudah_beli = []
 # === AMBIL TOKEN BARU DARI PUMPFUN ===
 def get_recent_tokens():
     try:
-        res = requests.get(PUMPFUN_API).json()
-        return res if isinstance(res, list) else []
+        res = requests.get(PUMPFUN_API, headers=HEADERS)
+        if res.status_code == 200:
+            data = res.json()
+            return data if isinstance(data, list) else []
+        else:
+            print(f"[❌] Gagal ambil token. Status code: {res.status_code}")
+            return []
     except Exception as e:
         print("[⚠️] Error ambil token:", e)
         return []
@@ -35,8 +44,9 @@ def get_recent_tokens():
 # === CEK HARGA TOKEN DI JUPITER ===
 def get_token_price(token_mint):
     try:
-        res = requests.get(f"{JUPITER_API}{token_mint}").json()
-        return float(res["data"][token_mint]["price"])
+        res = requests.get(f"{JUPITER_API}{token_mint}")
+        if res.status_code == 200:
+            return float(res.json()["data"][token_mint]["price"])
     except:
         return None
 
