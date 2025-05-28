@@ -7,7 +7,7 @@ from solana.rpc.types import TxOpts
 from solana.system_program import TransferParams, transfer
 
 # === KONFIGURASI ===
-PUMPFUN_API = "https://api.pump.fun/markets/recent"
+PUMPFUN_API = "https://pump.fun/api/markets/recent"  # ✅ endpoint benar
 JUPITER_API = "https://price.jup.ag/v4/price?ids="
 RPC = "https://api.mainnet-beta.solana.com"
 BUY_AMOUNT_SOL = 0.03
@@ -27,13 +27,7 @@ sudah_beli = []
 def get_recent_tokens():
     try:
         res = requests.get(PUMPFUN_API).json()
-        if isinstance(res, dict) and "markets" in res:
-            return res["markets"]
-        elif isinstance(res, list):
-            return res
-        else:
-            print("[❌] Format response tidak dikenal:", res)
-            return []
+        return res if isinstance(res, list) else []
     except Exception as e:
         print("[⚠️] Error ambil token:", e)
         return []
