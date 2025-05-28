@@ -9,7 +9,7 @@ from solana.transaction import Transaction
 from base64 import b64decode
 
 # === KONFIGURASI ===
-BUY_AMOUNT_SOL = 0.05
+BUY_AMOUNT_SOL = 0.07
 TAKE_PROFIT_MULTIPLIER = 2.0
 TRAILING_STOP_DROP = 0.3
 PUMPFUN_API = "https://api.pump.fun/markets/recent"
