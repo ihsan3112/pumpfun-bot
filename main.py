@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from solana.rpc.api import Client 
+from solana.rpc.api import Client
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
 from solana.system_program import TransferParams, transfer
@@ -12,6 +12,7 @@ from base64 import b64decode
 BUY_AMOUNT_SOL = 0.07
 TAKE_PROFIT_MULTIPLIER = 2.0
 TRAILING_STOP_DROP = 0.3
+
 PUMPFUN_API = "https://api.pump.fun/markets/recent"
 RPC = "https://api.mainnet-beta.solana.com"
 JUPITER_PRICE_API = "https://price.jup.ag/v4/price?ids="
@@ -45,21 +46,25 @@ def get_token_price(token_mint):
 # === BELI TOKEN ===
 def buy_token(token_address):
     try:
-        to_pubkey = Pubkey.from_string(token_address[:44])
+        to_pubkey = PublicKey(token_address[44:])  # potong 'mint:xxxxxx'
         lamports = int(BUY_AMOUNT_SOL * 1_000_000_000)
         tx = Transaction()
-        instr = transfer(TransferParams(
-            from_pubkey=my_address,
-            to_pubkey=to_pubkey,
-            lamports=lamports
-        ))
+        instr = transfer(
+            TransferParams(
+                from_pubkey=my_address,
+                to_pubkey=to_pubkey,
+                lamports=lamports
+            )
+        )
         tx.add(instr)
-        tx.sign([wallet])
+        tx.sign(wallet)
         resp = client.send_transaction(tx)
-        print("[BELI]", f"https://solscan.io/tx/{resp.value}")
+        print(f"[BELI] Sukses beli token: {token_address}")
+        print("Link:", f"https://solscan.io/tx/{resp.value}")
         return True
     except Exception as e:
-        print("Gagal beli:", e)
+        print(f"[BELI] Gagal beli token: {token_address}")
+        print("Error:", e)
         return False
 
 # === MONITOR DAN JUAL ===
@@ -70,11 +75,14 @@ def monitor_and_sell(token_id, harga_beli, token_mint, jumlah_token):
         if not harga_skrg:
             time.sleep(15)
             continue
+
         if harga_skrg > harga_puncak:
             harga_puncak = harga_skrg
+
         if harga_skrg <= harga_puncak * (1 - TRAILING_STOP_DROP):
-            print("TRAILING STOP TERPICU >> Jual token", token_id)
+            print(f"TRAILING STOP TERPICU >> Jual token {token_id}")
             break
+
         print(f"[MONITOR] {token_id} | Sekarang: {harga_skrg:.4f} | Tertinggi: {harga_puncak:.4f}")
         time.sleep(15)
 
@@ -90,7 +98,7 @@ while True:
         if token_id in sudah_beli:
             continue
 
-        # Filter hanya token dengan minimal 20 buyer
+        # Filter minimal 20 buyer
         if buyer_count < 20:
             print(f">> Skip {token_id} karena buyer kurang dari 20: {buyer_count}")
             continue
@@ -100,9 +108,8 @@ while True:
             harga_awal = get_token_price(token_mint)
             if harga_awal:
                 sudah_beli[token_id] = True
-                jumlah_token = 1000000  # placeholder
+                jumlah_token = 1000000  # dummy
                 monitor_and_sell(token_id, harga_awal, token_mint, jumlah_token)
             else:
                 print(">> Gagal ambil harga awal")
     time.sleep(15)
-
