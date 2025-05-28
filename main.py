@@ -7,7 +7,7 @@ from solana.rpc.types import TxOpts
 from solana.system_program import TransferParams, transfer
 
 # === KONFIGURASI ===
-PUMPFUN_API = "https://pump.fun/api/markets/recent"
+PUMPFUN_API = PUMPFUN_API = "https://client-api.pump.fun/v1/markets/recent"
 JUPITER_API = "https://price.jup.ag/v4/price?ids="
 RPC = "https://api.mainnet-beta.solana.com"
 BUY_AMOUNT_SOL = 0.03
