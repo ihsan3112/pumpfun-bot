@@ -1,25 +1,27 @@
-import requests
 import time
-import os
+import requests
 from datetime import datetime
+import os
 
-# === KONFIGURASI TELEGRAM ===
-TELEGRAM_TOKEN = "7304825429:AAFkU5nZ47g1b1dCJdTaQFZn0hw3c9JP0Bs"
-TELEGRAM_CHAT_ID = "7806614019"
+# === Konfigurasi Telegram ===
+BOT_TOKEN = "7304825429:AAFkU5nZ47g1b1dCJdTaQFZn0hw3c9JP0Bs"
+USER_ID = "7806614019"
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-# === URL RPC Solana ===
+# === RPC URL Solana ===
 RPC_URL = "https://api.mainnet-beta.solana.com"
 
-# Kirim pesan ke Telegram
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=data)
-    except:
-        print("Gagal mengirim ke Telegram.")
+# === Daftar token (mint address) yang akan dianalisis ===
+TOKEN_LIST = [
+    "DzqgQpPxzoUBGSwcCj6k3VnEg2JgxCfF99QofRaZpump"
+]
 
-# Ambil transaksi terbaru untuk sebuah mint address
+def kirim_telegram(pesan):
+    try:
+        requests.post(TELEGRAM_API, json={"chat_id": USER_ID, "text": pesan})
+    except Exception as e:
+        print(f"[x] Gagal kirim Telegram: {e}")
+
 def get_recent_transactions(mint_address):
     payload = {
         "jsonrpc": "2.0",
@@ -27,42 +29,40 @@ def get_recent_transactions(mint_address):
         "method": "getSignaturesForAddress",
         "params": [mint_address, {"limit": 20}]
     }
-    try:
-        response = requests.post(RPC_URL, json=payload)
-        result = response.json()
-        return result.get("result", [])
-    except:
-        return []
+    response = requests.post(RPC_URL, json=payload)
+    return response.json()
 
-# === LOGIKA ANALISA ===
-def analyze_token(mint_address):
-    send_telegram_message(f"🥛 Menganalisis token selama 5 menit: {mint_address}")
-    activity_log = []
+def analisa_token(mint_address):
+    print(f"🔍 Memulai analisa token: {mint_address}")
+    kirim_telegram(f"🔍 Mulai analisa token:\n{mint_address}")
 
-    for i in range(10):
+    previous = 0
+    penurunan = 0
+
+    for _ in range(9):
         result = get_recent_transactions(mint_address)
-        count = len(result)
-        activity_log.append(count)
-        now = datetime.now().strftime("%H:%M:%S")
-        print(f"⏰{now} - Jumlah transaksi terakhir: {count}")
+        count = len(result.get("result", []))
+        print(f"🕒 {datetime.now().strftime('%H:%M:%S')} — Jumlah transaksi: {count}")
+        if count < previous:
+            penurunan += 1
+        previous = count
         time.sleep(30)
 
-    drop_count = sum(1 for i in range(1, len(activity_log)) if activity_log[i] <= activity_log[i-1])
-    total_tx_last = sum(activity_log[-2:])
-
-    analisa = f"\n📋 Hasil Analisa:\nTotal transaksi dalam 5 menit: {total_tx_last}\nPenurunan aktivitas sebanyak {drop_count} dari 9 interval"
-
-    if drop_count >= 6:
-        kesimpulan = "⚠️Kesimpulan: Token kemungkinan MATI dalam 15 menit ke depan"
+    if previous == 0 or penurunan >= 7:
+        kesimpulan = "⚠️ Token kemungkinan MATI dalam 15 menit ke depan"
     else:
-        kesimpulan = "✅Kesimpulan: Token berpotensi bertahan (aktivitas stabil/naik)"
+        kesimpulan = "✅ Token masih aktif dan ada potensi bertahan"
 
-    print(analisa)
-    print(kesimpulan)
-    send_telegram_message(analisa + "\n" + kesimpulan)
+    print(f"\n📊 Hasil: {kesimpulan}\n")
+    kirim_telegram(f"📊 Hasil analisa:\n{kesimpulan}\nToken: {mint_address}")
 
-# === INPUT USER ===
-mint = input("Masukkan mint address token Pump.fun: ").strip()
+def monitor_tokens():
+    while True:
+        for token in TOKEN_LIST:
+            analisa_token(token)
+        time.sleep(60)  # Tunggu 1 menit sebelum analisa token berikutnya
 
-# === EKSEKUSI ===
-analyze_token(mint)
+if __name__ == "__main__":
+    print("🚀 Bot Railway telah dimulai...")
+    kirim_telegram("🚀 Bot Railway telah aktif dan siap menganalisa token.")
+    monitor_tokens()
