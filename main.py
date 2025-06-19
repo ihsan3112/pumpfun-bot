@@ -1,91 +1,68 @@
-import requests, json, time
-from solana.publickey import PublicKey
-from solana.rpc.api import Client
-from solana.keypair import Keypair
-from solana.transaction import Transaction
-from solana.rpc.types import TxOpts
-from solana.system_program import TransferParams, transfer
+import requests
+import time
+import os
+from datetime import datetime
 
-# === KONFIGURASI ===
-PUMPFUN_API = PUMPFUN_API = "https://client-api.pump.fun/v1/markets/recent"
-JUPITER_API = "https://price.jup.ag/v4/price?ids="
-RPC = "https://api.mainnet-beta.solana.com"
-BUY_AMOUNT_SOL = 0.03
-MIN_BUYER_COUNT = 1
-SLIPPAGE = 0.2
+# === KONFIGURASI TELEGRAM ===
+TELEGRAM_TOKEN = "7304825429:AAFkU5nZ47g1b1dCJdTaQFZn0hw3c9JP0Bs"
+TELEGRAM_CHAT_ID = "7806614019"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+# === URL RPC Solana ===
+RPC_URL = "https://api.mainnet-beta.solana.com"
 
-# === LOAD WALLET ===
-with open("my-autobuy-wallet.json", "r") as f:
-    key = json.load(f)
-    wallet = Keypair.from_secret_key(bytes(key))
-    my_address = wallet.public_key
-
-client = Client(RPC)
-sudah_beli = []
-
-# === AMBIL TOKEN BARU DARI PUMPFUN ===
-def get_recent_tokens():
+# Kirim pesan ke Telegram
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
-        res = requests.get(PUMPFUN_API, headers=HEADERS)
-        if res.status_code == 200:
-            data = res.json()
-            return data if isinstance(data, list) else []
-        else:
-            print(f"[❌] Gagal ambil token. Status code: {res.status_code}")
-            return []
-    except Exception as e:
-        print("[⚠️] Error ambil token:", e)
+        requests.post(url, data=data)
+    except:
+        print("Gagal mengirim ke Telegram.")
+
+# Ambil transaksi terbaru untuk sebuah mint address
+def get_recent_transactions(mint_address):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [mint_address, {"limit": 20}]
+    }
+    try:
+        response = requests.post(RPC_URL, json=payload)
+        result = response.json()
+        return result.get("result", [])
+    except:
         return []
 
-# === CEK HARGA TOKEN DI JUPITER ===
-def get_token_price(token_mint):
-    try:
-        res = requests.get(f"{JUPITER_API}{token_mint}")
-        if res.status_code == 200:
-            return float(res.json()["data"][token_mint]["price"])
-    except:
-        return None
+# === LOGIKA ANALISA ===
+def analyze_token(mint_address):
+    send_telegram_message(f"🥛 Menganalisis token selama 5 menit: {mint_address}")
+    activity_log = []
 
-# === FUNGSI BELI TOKEN (DUMMY) ===
-def buy_token(token_address):
-    print(f"💥 BUYING token: {token_address}")
-    try:
-        lamports = int(BUY_AMOUNT_SOL * 1_000_000_000)
-        tx = Transaction()
-        instr = transfer(TransferParams(
-            from_pubkey=my_address,
-            to_pubkey=my_address,
-            lamports=lamports
-        ))
-        tx.add(instr)
-        response = client.send_transaction(tx, wallet, opts=TxOpts(skip_preflight=True))
-        print("✅ Transaksi dummy terkirim:", response)
-    except Exception as e:
-        print("❌ Gagal beli token:", e)
+    for i in range(10):
+        result = get_recent_transactions(mint_address)
+        count = len(result)
+        activity_log.append(count)
+        now = datetime.now().strftime("%H:%M:%S")
+        print(f"⏰{now} - Jumlah transaksi terakhir: {count}")
+        time.sleep(30)
 
-# === LOOP UTAMA ===
-while True:
-    print("🔍 Cek token baru...")
-    tokens = get_recent_tokens()
+    drop_count = sum(1 for i in range(1, len(activity_log)) if activity_log[i] <= activity_log[i-1])
+    total_tx_last = sum(activity_log[-2:])
 
-    for token in tokens:
-        token_address = token.get("mint")
-        token_name = token.get("name", "UNKNOWN")
-        buyer_count = token.get("buyerCount", 0)
+    analisa = f"\n📋 Hasil Analisa:\nTotal transaksi dalam 5 menit: {total_tx_last}\nPenurunan aktivitas sebanyak {drop_count} dari 9 interval"
 
-        print(f"📦 Token: {token_name} | Buyers: {buyer_count}")
+    if drop_count >= 6:
+        kesimpulan = "⚠️Kesimpulan: Token kemungkinan MATI dalam 15 menit ke depan"
+    else:
+        kesimpulan = "✅Kesimpulan: Token berpotensi bertahan (aktivitas stabil/naik)"
 
-        if token_address and token_address not in sudah_beli and buyer_count >= MIN_BUYER_COUNT:
-            price = get_token_price(token_address)
-            if price:
-                print(f"🚀 Beli Token: {token_name} | Buyers: {buyer_count} | Harga: ${price}")
-                buy_token(token_address)
-                sudah_beli.append(token_address)
-            else:
-                print(f"⚠️ Harga tidak tersedia untuk {token_name}")
+    print(analisa)
+    print(kesimpulan)
+    send_telegram_message(analisa + "\n" + kesimpulan)
 
-    time.sleep(5)
+# === INPUT USER ===
+mint = input("Masukkan mint address token Pump.fun: ").strip()
+
+# === EKSEKUSI ===
+analyze_token(mint)
