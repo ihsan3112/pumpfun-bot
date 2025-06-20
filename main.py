@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from telebot import TeleBot
 from telebot.types import Message
 
@@ -11,74 +12,91 @@ bot = TeleBot(BOT_TOKEN)
 def format_number(n):
     return "{:,}".format(n)
 
-def score_token(vol_5m, vol_1h, vol_24h, liq, mc):
+def calculate_score(v5, v1h, v24h, mc, liq):
     score = 0
-    reasons = []
+    log = []
 
-    if vol_5m > liq * 0.8:
-        score += 40
-        reasons.append("Volume 5m tinggi dibanding liquidity")
-    if vol_1h > vol_24h * 0.2:
-        score += 30
-        reasons.append("Volume 1h aktif (lebih dari 20% dari 24h)")
-    if mc < liq * 10:
-        score += 20
-        reasons.append("Market cap belum terlalu berat")
-    if vol_24h > mc:
-        score += 10
-        reasons.append("Volume 24h lebih besar dari MC")
+    if v5 > 0 and v1h > 0 and v24h > 0:
+        if v5 >= v1h / 5:
+            score += 1
+            log.append("✅ Volume 5m aktif")
+        else:
+            log.append("⚠️ Volume 5m rendah")
 
-    if score >= 80:
-        status = "🟢 Sangat kuat untuk masuk cepat"
-    elif score >= 50:
-        status = "🟡 Moderat, momentum bisa naik atau turun"
+        if v1h >= v24h / 10:
+            score += 1
+            log.append("✅ Aktivitas 1 jam tinggi")
+        else:
+            log.append("⚠️ Aktivitas 1 jam melambat")
     else:
-        status = "🔴 Risiko tinggi, potensi rug atau token lemah"
+        log.append("⚠️ Salah satu volume kosong")
 
-    return score, status, reasons
+    if mc > liq:
+        score += 1
+        log.append("✅ MC lebih besar dari Liquidity")
+    else:
+        log.append("⚠️ MC lebih kecil dari Liquidity")
+
+    if liq > 5000:
+        score += 1
+        log.append("✅ Likuiditas sehat")
+    else:
+        log.append("⚠️ Likuiditas kecil")
+
+    if v24h > 10000:
+        score += 1
+        log.append("✅ Volume 24 jam sehat")
+    else:
+        log.append("⚠️ Volume 24 jam kecil")
+
+    return score, log
+
+def fetch_token_data(mint):
+    url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
+    for attempt in range(3):
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        time.sleep(2)
+    return None
 
 @bot.message_handler(func=lambda m: True)
 def handle_message(message: Message):
     mint = message.text.strip()
+    bot.send_message(message.chat.id, f"🧠 Mengecek mint:\n{mint}")
 
     if not mint or len(mint) < 32:
         bot.send_message(message.chat.id, "❌ Mint tidak valid atau terlalu pendek.")
         return
 
-    bot.send_message(message.chat.id, f"🧠 Mengecek mint: \n{mint}")
+    data = fetch_token_data(mint)
+    if not data or not data.get("pair"):
+        bot.send_message(message.chat.id, "⚠️ Token tidak ditemukan di Dexscreener. Coba lagi beberapa saat lagi.")
+        return
 
-    try:
-        # Contoh URL, disesuaikan dengan struktur data DexScreener API
-        url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
-        res = requests.get(url)
-        data = res.json()
+    pair = data["pair"]
+    v5 = float(pair.get("volume", {}).get("m5", 0))
+    v1h = float(pair.get("volume", {}).get("h1", 0))
+    v24h = float(pair.get("volume", {}).get("h24", 0))
+    mc = float(pair.get("fdv", 0))
+    liq = float(pair.get("liquidity", {}).get("usd", 0))
 
-        pair = data.get("pair")
-        if not pair:
-            bot.send_message(message.chat.id, "⚠️ Token tidak ditemukan di Dexscreener. Coba lagi beberapa saat lagi.")
-            return
+    score, analysis = calculate_score(v5, v1h, v24h, mc, liq)
 
-        supply = int(pair.get("totalSupply", 0))
-        liquidity = float(pair.get("liquidity", {}).get("usd", 0))
-        volume_5m = float(pair.get("volume", {}).get("m5", 0))
-        volume_1h = float(pair.get("volume", {}).get("h1", 0))
-        volume_24h = float(pair.get("volume", {}).get("h24", 0))
-        marketcap = float(pair.get("fdv", 0))
+    text = (
+        f"Total Supply: {format_number(pair.get('totalSupply', 0))}\n"
+        f"Liquidity: ${format_number(liq)}\n"
+        f"Volume (5m): ${format_number(v5)}\n"
+        f"Volume (1h): ${format_number(v1h)}\n"
+        f"Volume (24h): ${format_number(v24h)}\n"
+        f"MarketCap: ${format_number(mc)}\n"
+        f"Score: {score}/5\n\n"
+        f"Analisa:\n" + '\n'.join(analysis) + "\n\n"
+        f"🔗 Dexscreener: {pair.get('url')}"
+    )
 
-        score, status, reasons = score_token(volume_5m, volume_1h, volume_24h, liquidity, marketcap)
+    bot.send_message(message.chat.id, text)
 
-        reply = f"Total Supply: {format_number(supply)}\n"
-        reply += f"Liquidity: ${format_number(int(liquidity))}\n"
-        reply += f"Volume (5m): ${format_number(int(volume_5m))}\n"
-        reply += f"Volume (1h): ${format_number(int(volume_1h))}\n"
-        reply += f"Volume (24h): ${format_number(int(volume_24h))}\n"
-        reply += f"Marketcap: ${format_number(int(marketcap))}\n"
-        reply += f"\n📊 Skor: {score}/100\n📌 Analisa: {status}\n"
-        reply += f"\n🧩 Alasan:\n- " + "\n- ".join(reasons)
-
-        bot.send_message(message.chat.id, reply)
-
-    except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ Terjadi kesalahan saat mengambil data: {str(e)}")
-
-bot.polling()
+if __name__ == '__main__':
+    print("Bot sedang berjalan...")
+    bot.infinity_polling()
