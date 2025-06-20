@@ -1,129 +1,73 @@
-import os
-import telebot
+ import os
 import requests
-import json
-from datetime import datetime
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+TOKEN = os.getenv("BOT_TOKEN")
+USER_ID = os.getenv("USER_ID")
+bot = telebot.TeleBot(TOKEN)
 
-def get_token_supply(mint):
+def fetch_token_data(mint):
+    url = f"https://public-api.birdeye.so/public/token/{mint}"
+    headers = {"X-API-KEY": "birdeye_public_api_key"}  # ganti dengan API key jika perlu
     try:
-        url = "https://api.mainnet-beta.solana.com"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "getTokenSupply",
-            "params": [mint]
-        }
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            result = response.json()
-            return int(result["result"]["value"]["uiAmount"])
-    except:
-        pass
-    return -1
-
-def get_token_dex_data(mint):
-    try:
-        url = f"https://api.dexscreener.com/latest/dex/search?q={mint}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            pairs = response.json().get("pairs", [])
-            for pair in pairs:
-                if pair.get("baseToken", {}).get("address") == mint:
-                    return {
-                        "liquidity": pair["liquidity"]["usd"],
-                        "vol_5m": pair["volume"]["m5"],
-                        "vol_1h": pair["volume"]["h1"],
-                        "vol_24h": pair["volume"]["h24"],
-                        "txns": pair["txns"]["m5"],
-                        "buy_ratio": pair["txns"]["m5"] and (pair["txns"].get("m5_buy", 0) / max(pair["txns"]["m5"], 1)) * 100,
-                        "holders": pair.get("holders", 0),
-                        "dex_url": pair["url"],
-                        "created_at": pair.get("pairCreatedAt", 0)
-                    }
-    except:
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
         pass
     return None
 
-def analisa_status(dex):
-    v5 = dex['vol_5m']
-    v1 = dex['vol_1h']
-    v24 = dex['vol_24h']
-    liq = dex['liquidity']
-    txns = dex['txns']
-    buy_ratio = dex['buy_ratio']
+def fetch_dexscreener_data(mint):
+    url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return None
 
-    created = datetime.fromtimestamp(dex['created_at'] / 1000)
-    now = datetime.utcnow()
-    age_minutes = (now - created).total_seconds() / 60
+def build_reply(mint_address):
+    token_data = fetch_token_data(mint_address)
+    dexs_data = fetch_dexscreener_data(mint_address)
 
-    if age_minutes < 10:
-        if v5 > 500 and buy_ratio > 70:
-            return "🚀 Token baru dengan volume tinggi dan dominan dibeli"
-        elif v5 < 100:
-            return "⚠️ Token baru tapi volume sangat rendah"
-        else:
-            return "🔎 Token baru, butuh observasi lebih lanjut"
+    if not token_data:
+        return f"⚠️ Mint tidak valid atau tidak ditemukan: {mint_address}"
 
-    elif age_minutes < 60:
-        if v5 < 0.1 * v1:
-            return "⚠️ Aktivitas melambat dibanding 1 jam terakhir"
-        elif buy_ratio > 60 and txns > 10:
-            return "✅ Aktif: Transaksi sehat dan dominan pembelian"
-        else:
-            return "🔍 Stabil tapi tidak dominan beli"
+    reply = f"🧠 Menerima mint:\n{mint_address}\n"
+    reply += f"📦 Total Supply: {token_data.get('data', {}).get('supply', 'Unknown')}\n"
 
+    if not dexs_data or not dexs_data.get("pair"):
+        reply += "⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)"
+        return reply
+
+    pair = dexs_data["pair"]
+    liq = pair.get("liquidity", {})
+    vol = pair.get("volume", {})
+    reply += f"💧 Liquidity: ${liq.get('usd', 'N/A')}\n"
+    reply += f"📈 Volume (5m): ${vol.get('m5', 'N/A')}\n"
+    reply += f"📈 Volume (1h): ${vol.get('h1', 'N/A')}\n"
+    reply += f"📈 Volume (24h): ${vol.get('h24', 'N/A')}\n"
+
+    # Analisa status token sederhana berdasarkan umur dan volume
+    if vol.get('m5', 0) > 5000 and vol.get('h1', 0) > 20000:
+        reply += "✅ Analisa: Token masih aktif dan volume sehat"
     else:
-        if v5 < 0.05 * v24 and liq < 300:
-            return "❌ Mati suri: volume 5m kecil dibanding 24 jam dan likuiditas tipis"
-        elif buy_ratio < 40:
-            return "⚠️ Dominan penjualan, kemungkinan akan dump"
-        else:
-            return "✅ Stabil: Volume, likuiditas dan tren pembelian masih kuat"
+        reply += "⚠️ Analisa: Volume rendah, waspadai token mati"
 
-@bot.message_handler(commands=['start', 'help'])
-def welcome(message):
-    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa lengkap dan prediksi dump/bertahan.")
+    return reply
 
-@bot.message_handler(func=lambda m: True)
-def handle_mint(message):
-    mint = message.text.strip()
-    if len(mint) < 32:
-        bot.send_message(message.chat.id, "❌ Format mint tidak valid.")
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    if str(message.chat.id) != str(USER_ID):
         return
 
-    bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
+    mint_address = message.text.strip()
+    bot.send_message(message.chat.id, f"🧠 Menerima mint:\n{mint_address}")
 
-    supply = get_token_supply(mint)
-    supply_text = f"{supply:,}" if supply != -1 else "N/A"
+    reply = build_reply(mint_address)
+    bot.send_message(message.chat.id, reply)
 
-    dex = get_token_dex_data(mint)
-    if dex:
-        prediksi = analisa_status(dex)
-        reply = (
-            f"📦 Total Supply: {supply_text}\n"
-            f"💧 Liquidity: ${dex['liquidity']:,}\n"
-            f"📈 Volume (5m): ${dex['vol_5m']:,}\n"
-            f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
-            f"📉 Volume (24h): ${dex['vol_24h']:,}\n"
-            f"🔁 Transaksi (5m): {dex['txns']} | Buy Ratio: {dex['buy_ratio']:.1f}%\n"
-            f"👥 Holder: {dex['holders']}\n\n"
-            f"🔍 *Analisa:* {prediksi}\n\n"
-            f"📎 [Dexscreener]({dex['dex_url']})\n"
-            f"📎 [Pump.fun](https://pump.fun/{mint})"
-        )
-    else:
-        reply = (
-            f"📦 Total Supply: {supply_text}\n"
-            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
-            f"📎 [Pump.fun](https://pump.fun/{mint})"
-        )
-
-    bot.send_message(message.chat.id, reply, parse_mode="Markdown")
-
-if __name__ == "__main__":
-    print("Bot aktif dengan analisa cerdas...")
-    bot.polling(none_stop=True)
+print("🤖 Bot aktif dengan analisa cerdas...")
+bot.infinity_polling()
