@@ -20,21 +20,18 @@ def get_token_supply(mint):
         if response.status_code == 200:
             result = response.json()
             return int(result["result"]["value"]["uiAmount"])
-        else:
-            return -1
-    except Exception as e:
-        print("❌ Supply error:", e)
-        return -1
+    except:
+        pass
+    return -1
 
-def get_token_dex_data_via_search(mint):
+def get_token_dex_data(mint):
     try:
         url = f"https://api.dexscreener.com/latest/dex/search?q={mint}"
         response = requests.get(url)
         if response.status_code == 200:
             pairs = response.json().get("pairs", [])
             for pair in pairs:
-                base = pair.get("baseToken", {})
-                if base.get("address", "") == mint:
+                if pair.get("baseToken", {}).get("address") == mint:
                     return {
                         "liquidity": pair["liquidity"]["usd"],
                         "vol_5m": pair["volume"]["m5"],
@@ -42,22 +39,27 @@ def get_token_dex_data_via_search(mint):
                         "vol_24h": pair["volume"]["h24"],
                         "dex_url": pair["url"]
                     }
-        return None
-    except Exception as e:
-        print("❌ Dex search error:", e)
-        return None
+    except:
+        pass
+    return None
 
-def interpret_status(volume_5m, liquidity):
-    if volume_5m == 0 or liquidity < 10:
-        return "❌ Mati Suri"
-    elif volume_5m < 50:
-        return "⚠️ Sepi"
+def analisa_status(dex):
+    v5 = dex['vol_5m']
+    v1 = dex['vol_1h']
+    liq = dex['liquidity']
+
+    if v5 == 0 and liq < 100:
+        return "❌ Sangat Berisiko: Mati suri dan liquidity sangat rendah"
+    elif v5 < 0.01 * v1 or liq < 300:
+        return "⚠️ Waspada: Aktivitas menurun atau liquidity tipis"
+    elif v5 > 0.02 * v1 and liq > 1000:
+        return "✅ Stabil: Token masih aktif dan volume sehat"
     else:
-        return "✅ Aktif"
+        return "🔎 Belum jelas: Perlu observasi volume lanjutan"
 
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
-    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa.")
+    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa lengkap.")
 
 @bot.message_handler(func=lambda m: True)
 def handle_mint(message):
@@ -71,27 +73,28 @@ def handle_mint(message):
     supply = get_token_supply(mint)
     supply_text = f"{supply:,}" if supply != -1 else "N/A"
 
-    dex = get_token_dex_data_via_search(mint)
+    dex = get_token_dex_data(mint)
     if dex:
-        status = interpret_status(dex["vol_5m"], dex["liquidity"])
+        prediksi = analisa_status(dex)
         reply = (
             f"📦 Total Supply: {supply_text}\n"
             f"💧 Liquidity: ${dex['liquidity']:,}\n"
-            f"📈 Volume (5m): ${dex['vol_5m']:,} → {status}\n"
+            f"📈 Volume (5m): ${dex['vol_5m']:,}\n"
             f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
             f"📉 Volume (24h): ${dex['vol_24h']:,}\n\n"
+            f"🔍 *Analisa:* {prediksi}\n\n"
             f"📎 [Dexscreener]({dex['dex_url']})\n"
             f"📎 [Pump.fun](https://pump.fun/{mint})"
         )
     else:
         reply = (
             f"📦 Total Supply: {supply_text}\n"
-            f"⚠️ Token belum ditemukan di Dexscreener (mungkin terlalu baru atau tidak match)\n\n"
+            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
             f"📎 [Pump.fun](https://pump.fun/{mint})"
         )
 
     bot.send_message(message.chat.id, reply, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot siap analisa cerdas...")
+    print("Bot aktif dan menganalisa dump/bertahan...")
     bot.polling(none_stop=True)
