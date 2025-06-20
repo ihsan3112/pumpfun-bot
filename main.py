@@ -2,24 +2,22 @@ import os
 import telebot
 import requests
 
-# Ambil token dari Railway environment variable
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN tidak ditemukan!")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Ambil jumlah holders dari Solscan API
+# Ambil jumlah holders dari Solscan token meta endpoint
 def get_holder_count(mint):
     try:
-        url = f"https://public-api.solscan.io/token/holders?tokenAddress={mint}&limit=1"
-        headers = {
-            "accept": "application/json"
-        }
+        url = f"https://public-api.solscan.io/token/meta?tokenAddress={mint}"
+        headers = {"accept": "application/json"}
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json()
-            return data.get("total", 0)
+            holders = data.get("holder")
+            return holders if holders is not None else 0
         else:
             return -1
     except Exception as e:
