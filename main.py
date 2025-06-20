@@ -1,6 +1,7 @@
 import os
 import telebot
 import requests
+import json
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -8,20 +9,24 @@ if not BOT_TOKEN:
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Ambil jumlah holders dari Solscan token meta endpoint
-def get_holder_count(mint):
+def get_token_supply(mint):
     try:
-        url = f"https://public-api.solscan.io/token/meta?tokenAddress={mint}"
-        headers = {"accept": "application/json"}
-        response = requests.get(url, headers=headers)
+        url = "https://api.mainnet-beta.solana.com"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenSupply",
+            "params": [mint]
+        }
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
         if response.status_code == 200:
-            data = response.json()
-            holders = data.get("holder")
-            return holders if holders is not None else 0
+            result = response.json()
+            return int(result["result"]["value"]["uiAmount"])
         else:
             return -1
     except Exception as e:
-        print("❌ Error saat ambil data:", e)
+        print("❌ Error saat ambil token supply:", e)
         return -1
 
 @bot.message_handler(commands=['start', 'help'])
@@ -34,18 +39,18 @@ def handle_message(message):
     if len(mint) >= 32:
         bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
 
-        holder_count = get_holder_count(mint)
-        if holder_count == -1:
-            bot.send_message(message.chat.id, "❌ Gagal mengambil data holders.")
+        supply = get_token_supply(mint)
+        if supply == -1:
+            bot.send_message(message.chat.id, "❌ Gagal mengambil total supply.")
         else:
             reply = (
-                f"👥 Jumlah holders: {holder_count}\n"
+                f"📦 Total Supply: {supply}\n"
                 f"📎 [Dexscreener](https://dexscreener.com/solana/{mint})\n"
                 f"📎 [Pump.fun](https://pump.fun/{mint})"
             )
             bot.send_message(message.chat.id, reply, parse_mode="Markdown")
     else:
-        bot.reply_to(message, "❌ Format mint tidak valid. Harus minimal 32 karakter.")
+        bot.reply_to(message, "❌ Format mint tidak valid.")
 
 if __name__ == "__main__":
     print("Bot siap menerima perintah...")
