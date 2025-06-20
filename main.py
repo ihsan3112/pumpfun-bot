@@ -1,4 +1,4 @@
- import os
+import os
 import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,7 +9,7 @@ bot = telebot.TeleBot(TOKEN)
 
 def fetch_token_data(mint):
     url = f"https://public-api.birdeye.so/public/token/{mint}"
-    headers = {"X-API-KEY": "birdeye_public_api_key"}  # ganti dengan API key jika perlu
+    headers = {"X-API-KEY": "birdeye_public_api_key"}  # Ganti jika pakai kunci asli
     try:
         res = requests.get(url, headers=headers)
         if res.status_code == 200:
@@ -45,12 +45,12 @@ def build_reply(mint_address):
     pair = dexs_data["pair"]
     liq = pair.get("liquidity", {})
     vol = pair.get("volume", {})
+
     reply += f"💧 Liquidity: ${liq.get('usd', 'N/A')}\n"
     reply += f"📈 Volume (5m): ${vol.get('m5', 'N/A')}\n"
     reply += f"📈 Volume (1h): ${vol.get('h1', 'N/A')}\n"
     reply += f"📈 Volume (24h): ${vol.get('h24', 'N/A')}\n"
 
-    # Analisa status token sederhana berdasarkan umur dan volume
     if vol.get('m5', 0) > 5000 and vol.get('h1', 0) > 20000:
         reply += "✅ Analisa: Token masih aktif dan volume sehat"
     else:
@@ -65,7 +65,6 @@ def handle_message(message):
 
     mint_address = message.text.strip()
     bot.send_message(message.chat.id, f"🧠 Menerima mint:\n{mint_address}")
-
     reply = build_reply(mint_address)
     bot.send_message(message.chat.id, reply)
 
