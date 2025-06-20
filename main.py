@@ -6,6 +6,7 @@ import json
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
+
 def get_token_supply(mint):
     try:
         url = "https://api.mainnet-beta.solana.com"
@@ -24,6 +25,7 @@ def get_token_supply(mint):
         pass
     return -1
 
+
 def get_token_dex_data(mint):
     try:
         url = f"https://api.dexscreener.com/latest/dex/search?q={mint}"
@@ -37,29 +39,37 @@ def get_token_dex_data(mint):
                         "vol_5m": pair["volume"]["m5"],
                         "vol_1h": pair["volume"]["h1"],
                         "vol_24h": pair["volume"]["h24"],
+                        "txns": pair["txns"]["m5"],
+                        "buy_ratio": pair["txns"]["m5"] and (pair["txns"].get("m5_buy", 0) / max(pair["txns"]["m5"], 1)) * 100,
+                        "holders": pair.get("holders", 0),
                         "dex_url": pair["url"]
                     }
     except:
         pass
     return None
 
+
 def analisa_status(dex):
     v5 = dex['vol_5m']
     v1 = dex['vol_1h']
     liq = dex['liquidity']
+    txns = dex['txns']
+    buy_ratio = dex['buy_ratio']
 
     if v5 == 0 and liq < 100:
         return "❌ Sangat Berisiko: Mati suri dan liquidity sangat rendah"
     elif v5 < 0.01 * v1 or liq < 300:
         return "⚠️ Waspada: Aktivitas menurun atau liquidity tipis"
-    elif v5 > 0.02 * v1 and liq > 1000:
-        return "✅ Stabil: Token masih aktif dan volume sehat"
+    elif txns > 5 and buy_ratio > 60 and liq > 1000:
+        return "✅ Stabil: Token aktif, volume sehat, dan dominan pembelian"
     else:
-        return "🔎 Belum jelas: Perlu observasi volume lanjutan"
+        return "🔎 Belum jelas: Perlu observasi lanjutan"
+
 
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
-    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa lengkap.")
+    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa lengkap dan prediksi dump/bertahan.")
+
 
 @bot.message_handler(func=lambda m: True)
 def handle_mint(message):
@@ -81,7 +91,9 @@ def handle_mint(message):
             f"💧 Liquidity: ${dex['liquidity']:,}\n"
             f"📈 Volume (5m): ${dex['vol_5m']:,}\n"
             f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
-            f"📉 Volume (24h): ${dex['vol_24h']:,}\n\n"
+            f"📉 Volume (24h): ${dex['vol_24h']:,}\n"
+            f"🔁 Transaksi (5m): {dex['txns']} | Buy Ratio: {dex['buy_ratio']:.1f}%\n"
+            f"👥 Holder: {dex['holders']}\n\n"
             f"🔍 *Analisa:* {prediksi}\n\n"
             f"📎 [Dexscreener]({dex['dex_url']})\n"
             f"📎 [Pump.fun](https://pump.fun/{mint})"
@@ -95,6 +107,8 @@ def handle_mint(message):
 
     bot.send_message(message.chat.id, reply, parse_mode="Markdown")
 
+
 if __name__ == "__main__":
-    print("Bot aktif dan menganalisa dump/bertahan...")
+    print("Bot aktif dengan analisa cerdas...")
     bot.polling(none_stop=True)
+    
