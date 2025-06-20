@@ -1,16 +1,22 @@
-import os
+import requests
+import time
+import datetime
 import telebot
 
-TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
-USER_ID = os.getenv("USER_ID")
+# Token dan user ID langsung ditulis di script (hardcoded)
+TOKEN_TELEGRAM = "8184173057:AAFxfvVPUpwoWHP3LPnZM1b1qQy–E96sGA"
+USER_ID = 7806614019
 
-if not TOKEN_TELEGRAM or not USER_ID:
-    print("❌ Environment variable TOKEN_TELEGRAM atau USER_ID belum diset.")
-else:
-    try:
-        USER_ID = int(USER_ID)
-        bot = telebot.TeleBot(TOKEN_TELEGRAM)
-        bot.send_message(USER_ID, "✅ Bot berhasil dijalankan dan Telegram sudah terhubung!")
-        print("Pesan terkirim. Bot siap digunakan.")
-    except Exception as e:
-        print("❌ Gagal kirim pesan ke Telegram:", e)
+bot = telebot.TeleBot(TOKEN_TELEGRAM)
+
+RPC_URL = "https://api.mainnet-beta.solana.com"
+
+def get_transactions(mint_address):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [mint_address, {"limit": 20}]
+    }
+    response = requests.post(RPC_URL, json=payload)
+    result = response.json()
