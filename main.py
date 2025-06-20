@@ -1,10 +1,8 @@
 import os
 import requests
-import time
 from telebot import TeleBot
 from telebot.types import Message
 
-# Ambil token dan user ID dari variabel environment (Railway)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 USER_ID = os.getenv("USER_ID")
 
@@ -17,27 +15,14 @@ def analyze_volume(volumes):
     v5, v1h, v24h = volumes
     if v5 > 0 and v1h > 0 and v24h > 0:
         if v5 < v1h / 10:
-            return "⚠️ Volume 5m sangat kecil dibanding 1h = kemungkinan token melambat"
+            return "⚠️ Volume 5m kecil dibanding 1h → kemungkinan melambat"
         elif v1h < v24h / 10:
-            return "⚠️ Aktivitas 1 jam rendah dibanding 24 jam = momentum mungkin hilang"
+            return "⚠️ Aktivitas 1h rendah dibanding 24h → momentum melemah"
+        elif v5 > v1h / 2 and v1h > v24h / 2:
+            return "📈 Sinyal kuat: volume meningkat cepat → potensi pump"
         else:
-            return "✅ Stabil: Token masih aktif dan volume sehat"
-    return "⚠️ Volume sangat rendah = token mungkin tidak aktif"
-
-def fetch_token_data(mint):
-    url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("pair") is None:
-                time.sleep(1)
-                response = requests.get(url, timeout=5)
-                data = response.json()
-            return data.get("pair")
-        return None
-    except Exception:
-        return None
+            return "✅ Stabil: token aktif & volume cukup sehat"
+    return "❓ Data volume tidak lengkap atau salah format"
 
 @bot.message_handler(func=lambda m: True)
 def handle_message(message: Message):
@@ -49,32 +34,40 @@ def handle_message(message: Message):
 
     bot.send_message(message.chat.id, f"🧠 Mengecek mint:\n{mint}")
 
-    pair_data = fetch_token_data(mint)
-    if not pair_data:
-        bot.send_message(message.chat.id, "⚠️ Token tidak ditemukan di Dexscreener. Coba lagi beberapa saat lagi.")
-        return
-
     try:
-        total_supply = format_number(int(pair_data.get("totalSupply", 0)))
-        liquidity = f"${format_number(round(float(pair_data['liquidity']['usd']), 2))}"
-        vol_5m = float(pair_data['volume']['usd']['m5'])
-        vol_1h = float(pair_data['volume']['usd']['h1'])
-        vol_24h = float(pair_data['volume']['usd']['h24'])
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+        r = requests.get(url, timeout=10)
 
-        volume_analysis = analyze_volume((vol_5m, vol_1h, vol_24h))
+        if r.status_code != 200:
+            bot.send_message(message.chat.id, "⚠️ Gagal mengambil data dari Dexscreener.")
+            return
 
-        message_text = (
-            f"📦 Total Supply: {total_supply}\n"
-            f"💧 Liquidity: {liquidity}\n"
-            f"📊 Volume (5m): ${format_number(round(vol_5m))}\n"
-            f"📊 Volume (1h): ${format_number(round(vol_1h))}\n"
-            f"📊 Volume (24h): ${format_number(round(vol_24h))}\n"
-            f"\n🔎 Analisa: {volume_analysis}\n"
-            f"🔗 Dexscreener: {pair_data['url']}"
+        data = r.json()
+        pairs = data.get("pairs")
+
+        if not pairs:
+            bot.send_message(message.chat.id, "⚠️ Token tidak ditemukan di Dexscreener.")
+            return
+
+        pair = pairs[0]
+        vol5m = float(pair.get("volume", {}).get("m5", 0))
+        vol1h = float(pair.get("volume", {}).get("h1", 0))
+        vol24h = float(pair.get("volume", {}).get("h24", 0))
+        liquidity = float(pair.get("liquidity", {}).get("usd", 0))
+        supply = pair.get("fdv", "n/a")
+
+        result = (
+            f"📦 Total Supply: {supply}\n"
+            f"💧 Liquidity: ${format_number(int(liquidity))}\n"
+            f"📊 Volume (5m): ${format_number(int(vol5m))}\n"
+            f"📊 Volume (1h): ${format_number(int(vol1h))}\n"
+            f"📊 Volume (24h): ${format_number(int(vol24h))}\n"
+            f"📉 Analisa: {analyze_volume((vol5m, vol1h, vol24h))}\n"
+            f"🔗 Dexscreener: {pair.get('url')}"
         )
 
-        bot.send_message(message.chat.id, message_text)
+        bot.send_message(message.chat.id, result)
     except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ Gagal membaca data token. Error: {str(e)}")
+        bot.send_message(message.chat.id, f"❌ Error: {str(e)}")
 
 bot.polling()
