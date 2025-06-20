@@ -1,22 +1,18 @@
-import requests
-import time
-import datetime
 import telebot
 
-# Token dan user ID langsung ditulis di script (hardcoded)
-TOKEN_TELEGRAM = "8184173057:AAFxfvVPUpwoWHP3LPnZM1b1qQy–E96sGA"
+# ✅ Gunakan token baru dari BotFather
+TOKEN_TELEGRAM = "8184173057:AAFxfvVPUpwovWHP3LPnZMlblqQy-E96sGA"
 USER_ID = 7806614019
 
 bot = telebot.TeleBot(TOKEN_TELEGRAM)
 
-RPC_URL = "https://api.mainnet-beta.solana.com"
+# Notifikasi awal
+bot.send_message(USER_ID, "✅ Bot Railway aktif!\nKirimkan mint address token untuk mulai analisa.")
 
-def get_transactions(mint_address):
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getSignaturesForAddress",
-        "params": [mint_address, {"limit": 20}]
-    }
-    response = requests.post(RPC_URL, json=payload)
-    result = response.json()
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    mint_address = message.text.strip()
+    response = f"📥 Mint address diterima:\n`{mint_address}`"
+    bot.reply_to(message, response, parse_mode="Markdown")
+
+bot.polling(none_stop=True)
