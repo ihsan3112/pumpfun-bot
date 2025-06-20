@@ -6,7 +6,6 @@ import json
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Fungsi ambil total supply dari Solana RPC
 def get_token_supply(mint):
     try:
         url = "https://api.mainnet-beta.solana.com"
@@ -27,7 +26,6 @@ def get_token_supply(mint):
         print("❌ Supply error:", e)
         return -1
 
-# Fungsi ambil data dari Dexscreener
 def get_token_dex_data(mint):
     try:
         url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
@@ -47,7 +45,6 @@ def get_token_dex_data(mint):
         print("❌ Dexscreener error:", e)
         return None
 
-# Penilaian status token
 def interpret_status(volume_5m, liquidity):
     if volume_5m == 0 or liquidity < 10:
         return "❌ Mati Suri"
@@ -58,7 +55,7 @@ def interpret_status(volume_5m, liquidity):
 
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
-    bot.reply_to(message, "🤖 Bot analisa aktif!\nKirimkan mint address token Solana.")
+    bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa.")
 
 @bot.message_handler(func=lambda m: True)
 def handle_mint(message):
@@ -69,11 +66,9 @@ def handle_mint(message):
 
     bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
 
-    # Total supply
     supply = get_token_supply(mint)
     supply_text = f"{supply:,}" if supply != -1 else "N/A"
 
-    # Dexscreener data
     dex = get_token_dex_data(mint)
     if dex:
         status = interpret_status(dex["vol_5m"], dex["liquidity"])
@@ -89,12 +84,12 @@ def handle_mint(message):
     else:
         reply = (
             f"📦 Total Supply: {supply_text}\n"
-            f"⚠️ Gagal mengambil data volume dari Dexscreener.\n\n"
+            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
             f"📎 [Pump.fun](https://pump.fun/{mint})"
         )
 
     bot.send_message(message.chat.id, reply, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot siap analisa...")
+    print("Bot siap menganalisa...")
     bot.polling(none_stop=True)
