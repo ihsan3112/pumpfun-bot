@@ -8,6 +8,10 @@ import telebot
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 USER_ID = int(os.getenv("USER_ID"))
 
+if not TOKEN_TELEGRAM or not USER_ID:
+    print("❌ Environment variable TOKEN_TELEGRAM atau USER_ID belum diset.")
+    exit()
+
 bot = telebot.TeleBot(TOKEN_TELEGRAM)
 
 RPC_URL = "https://api.mainnet-beta.solana.com"
@@ -29,37 +33,35 @@ def get_transactions(mint_address):
 # Fungsi menganalisis token
 def analisa_token(mint_address):
     hasil = []
-    bot.send_message(USER_ID, f"🧠 Memulai analisa token:\n{mint_address}", parse_mode="Markdown")
-    
-    for i in range(10):
-        tx = get_transactions(mint_address)
-        hasil.append(len(tx))
-        print(f"⏱️ {datetime.datetime.now().strftime('%H:%M:%S')} - Jumlah transaksi: {len(tx)}")
-        time.sleep(30)
+    bot.send_message(USER_ID, f"🔍 Memulai analisa token:\n`{mint_address}`", parse_mode="Markdown")
 
-    penurunan = 0
-    for i in range(1, len(hasil)):
-        if hasil[i] <= hasil[i - 1]:
-            penurunan += 1
+    txs = get_transactions(mint_address)
+    if not txs:
+        bot.send_message(USER_ID, "⚠️ Tidak ada transaksi ditemukan untuk token ini.")
+        return
 
-    if penurunan >= 7:
-        bot.send_message(USER_ID, f"⚠️ Terjadi penurunan transaksi pada token ini. Waspada dump.")
-    else:
-        bot.send_message(USER_ID, f"✅ Aktivitas token stabil atau meningkat.")
+    for tx in txs:
+        signature = tx.get("signature")
+        blocktime = tx.get("blockTime")
+        waktu = datetime.datetime.fromtimestamp(blocktime).strftime("%H:%M:%S") if blocktime else "?"
+        hasil.append(f"🧾 Tx: `{signature}`\n⏰ Waktu: `{waktu}`")
 
-# Fungsi sambutan awal
+    ringkasan = "\n\n".join(hasil)
+    bot.send_message(USER_ID, f"📊 Ringkasan transaksi terakhir:\n\n{ringkasan}", parse_mode="Markdown")
+
+# Fungsi kirim sambutan awal
 def kirim_sambutan():
     bot.send_message(USER_ID, "✅ Bot Railway aktif!!\nKirimkan mint address token untuk mulai analisa.")
 
-# Fungsi menangani pesan masuk dari Telegram
-@bot.message_handler(func=lambda message: True)
+# Fungsi menangani pesan masuk
 def tangani_pesan(message):
-    mint = message.text.strip()
-    if len(mint) < 30:
-        bot.send_message(USER_ID, "❌ Format mint address tidak valid.")
-        return
-    analisa_token(mint)
+    teks = message.text.strip()
+    if len(teks) > 20:
+        analisa_token(teks)
+    else:
+        bot.send_message(USER_ID, "❌ Format mint address tidak valid atau terlalu pendek.")
 
-if __name__ == "__main__":
-    kirim_sambutan()
-    bot.polling()
+# Jalankan
+kirim_sambutan()
+bot.register_next_step_handler_by_chat_id(USER_ID, tangani_pesan)
+bot.polling()
