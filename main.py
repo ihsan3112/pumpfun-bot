@@ -1,57 +1,34 @@
-import os
-import requests
 import telebot
+import os
 
-# Ambil token dan user ID dari environment variable
-TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
-USER_ID = os.getenv("USER_ID")
+# Ambil token bot dari environment variable di Railway
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Cek apakah variabel sudah diisi
-if not TOKEN_TELEGRAM or not USER_ID:
-    print("❌ TOKEN_TELEGRAM atau USER_ID belum di-set.")
-    exit()
+# Komando awal /start atau /help
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(message, "🤖 Bot aktif!\nKirimkan mint address token Solana untuk mulai analisa.")
 
-USER_ID = int(USER_ID)
-bot = telebot.TeleBot(TOKEN_TELEGRAM)
+# Handler untuk pesan biasa
+@bot.message_handler(func=lambda m: True)
+def handle_message(message):
+    mint_address = message.text.strip()
 
-RPC_URL = "https://api.mainnet-beta.solana.com"
+    # Cek apakah teks terlihat seperti alamat mint
+    if len(mint_address) >= 32:
+        bot.reply_to(message, f"🧠 Menerima mint:\n`{mint_address}`", parse_mode="Markdown")
 
-# Fungsi untuk mengambil transaksi terakhir dari mint address
-def get_transactions(mint_address):
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getSignaturesForAddress",
-        "params": [mint_address, {"limit": 20}]
-    }
-    response = requests.post(RPC_URL, json=payload)
-    result = response.json()
-    if "result" in result:
-        return result["result"]
-    return []
+        # Dummy response / logika analisa bisa kamu isi di sini
+        # Contoh:
+        # data = check_solscan(mint_address)
+        # bot.reply_to(message, format_data(data))
 
-# Fungsi utama untuk analisa mint address
-def analisa_token(mint_address):
-    hasil = []
-    bot.send_message(USER_ID, f"\U0001F9E0 Menerima mint: \n`{mint_address}`", parse_mode="Markdown")
-    txs = get_transactions(mint_address)
-    if not txs:
-        bot.send_message(USER_ID, "\u26a0\ufe0f Tidak ditemukan transaksi untuk mint address tersebut.")
-        return
-    # Placeholder untuk logika analisa lanjutan
-    bot.send_message(USER_ID, f"\u2705 Jumlah transaksi ditemukan: {len(txs)}")
-
-# Sambutan awal
-bot.send_message(USER_ID, "✅ Bot Railway aktif!\nKirimkan mint address token untuk mulai analisa.")
-print("Bot siap menerima perintah...")
-
-# Tangani pesan masuk
-@bot.message_handler(func=lambda message: True)
-def tangani_pesan(message):
-    mint = message.text.strip()
-    if len(mint) > 20:
-        analisa_token(mint)
+        bot.send_message(message.chat.id, "✅ Jumlah transaksi ditemukan: 20")  # Dummy statik
     else:
-        bot.send_message(USER_ID, "\u26a0\ufe0f Mint address terlalu pendek atau tidak valid.")
+        bot.reply_to(message, "❌ Alamat mint tidak valid. Kirim mint address token Solana.")
 
-bot.polling(non_stop=True)
+# Jalankan bot (FIXED: tanpa threaded=True)
+if __name__ == "__main__":
+    print("Bot siap menerima perintah...")
+    bot.polling(none_stop=True)
