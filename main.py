@@ -29,37 +29,37 @@ def get_transactions(mint_address):
 # Fungsi menganalisis token
 def analisa_token(mint_address):
     hasil = []
-    bot.send_message(USER_ID, f"🔎 Memulai analisa token:\n`{mint_address}`", parse_mode="Markdown")
-
+    bot.send_message(USER_ID, f"🧠 Memulai analisa token:\n{mint_address}", parse_mode="Markdown")
+    
     for i in range(10):
         tx = get_transactions(mint_address)
         hasil.append(len(tx))
-        print(f"⏰ {datetime.datetime.now().strftime('%H:%M:%S')} – Jumlah transaksi: {len(tx)}")
+        print(f"⏱️ {datetime.datetime.now().strftime('%H:%M:%S')} - Jumlah transaksi: {len(tx)}")
         time.sleep(30)
 
     penurunan = 0
     for i in range(1, len(hasil)):
-        if hasil[i] <= hasil[i-1]:
+        if hasil[i] <= hasil[i - 1]:
             penurunan += 1
 
     if penurunan >= 7:
-        bot.send_message(USER_ID, "⚠️ Aktivitas transaksi menurun drastis!")
+        bot.send_message(USER_ID, f"⚠️ Terjadi penurunan transaksi pada token ini. Waspada dump.")
     else:
-        bot.send_message(USER_ID, "✅ Aktivitas masih stabil.")
+        bot.send_message(USER_ID, f"✅ Aktivitas token stabil atau meningkat.")
 
-# Kirim sambutan awal saat bot aktif
+# Fungsi sambutan awal
 def kirim_sambutan():
     bot.send_message(USER_ID, "✅ Bot Railway aktif!!\nKirimkan mint address token untuk mulai analisa.")
 
-# Tangani pesan masuk
+# Fungsi menangani pesan masuk dari Telegram
 @bot.message_handler(func=lambda message: True)
 def tangani_pesan(message):
     mint = message.text.strip()
-    if len(mint) >= 32:
-        analisa_token(mint)
-    else:
-        bot.send_message(USER_ID, "❌ Mint address tidak valid. Harus lebih dari 32 karakter.")
+    if len(mint) < 30:
+        bot.send_message(USER_ID, "❌ Format mint address tidak valid.")
+        return
+    analisa_token(mint)
 
-# Jalankan bot
-kirim_sambutan()
-bot.polling()
+if __name__ == "__main__":
+    kirim_sambutan()
+    bot.polling()
