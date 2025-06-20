@@ -26,23 +26,25 @@ def get_token_supply(mint):
         print("❌ Supply error:", e)
         return -1
 
-def get_token_dex_data(mint):
+def get_token_dex_data_via_search(mint):
     try:
-        url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
+        url = f"https://api.dexscreener.com/latest/dex/search?q={mint}"
         response = requests.get(url)
         if response.status_code == 200:
-            data = response.json().get("pair")
-            if data:
-                return {
-                    "liquidity": data["liquidity"]["usd"],
-                    "vol_5m": data["volume"]["m5"],
-                    "vol_1h": data["volume"]["h1"],
-                    "vol_24h": data["volume"]["h24"],
-                    "dex_url": data["url"]
-                }
+            pairs = response.json().get("pairs", [])
+            for pair in pairs:
+                base = pair.get("baseToken", {})
+                if base.get("address", "") == mint:
+                    return {
+                        "liquidity": pair["liquidity"]["usd"],
+                        "vol_5m": pair["volume"]["m5"],
+                        "vol_1h": pair["volume"]["h1"],
+                        "vol_24h": pair["volume"]["h24"],
+                        "dex_url": pair["url"]
+                    }
         return None
     except Exception as e:
-        print("❌ Dexscreener error:", e)
+        print("❌ Dex search error:", e)
         return None
 
 def interpret_status(volume_5m, liquidity):
@@ -69,7 +71,7 @@ def handle_mint(message):
     supply = get_token_supply(mint)
     supply_text = f"{supply:,}" if supply != -1 else "N/A"
 
-    dex = get_token_dex_data(mint)
+    dex = get_token_dex_data_via_search(mint)
     if dex:
         status = interpret_status(dex["vol_5m"], dex["liquidity"])
         reply = (
@@ -84,12 +86,12 @@ def handle_mint(message):
     else:
         reply = (
             f"📦 Total Supply: {supply_text}\n"
-            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
+            f"⚠️ Token belum ditemukan di Dexscreener (mungkin terlalu baru atau tidak match)\n\n"
             f"📎 [Pump.fun](https://pump.fun/{mint})"
         )
 
     bot.send_message(message.chat.id, reply, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot siap menganalisa...")
+    print("Bot siap analisa cerdas...")
     bot.polling(none_stop=True)
