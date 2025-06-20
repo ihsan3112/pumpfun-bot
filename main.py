@@ -4,11 +4,9 @@ import requests
 import json
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN tidak ditemukan!")
-
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# Fungsi ambil total supply dari Solana RPC
 def get_token_supply(mint):
     try:
         url = "https://api.mainnet-beta.solana.com"
@@ -26,32 +24,77 @@ def get_token_supply(mint):
         else:
             return -1
     except Exception as e:
-        print("❌ Error saat ambil token supply:", e)
+        print("❌ Supply error:", e)
         return -1
 
+# Fungsi ambil data dari Dexscreener
+def get_token_dex_data(mint):
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json().get("pair")
+            if data:
+                return {
+                    "liquidity": data["liquidity"]["usd"],
+                    "vol_5m": data["volume"]["m5"],
+                    "vol_1h": data["volume"]["h1"],
+                    "vol_24h": data["volume"]["h24"],
+                    "dex_url": data["url"]
+                }
+        return None
+    except Exception as e:
+        print("❌ Dexscreener error:", e)
+        return None
+
+# Penilaian status token
+def interpret_status(volume_5m, liquidity):
+    if volume_5m == 0 or liquidity < 10:
+        return "❌ Mati Suri"
+    elif volume_5m < 50:
+        return "⚠️ Sepi"
+    else:
+        return "✅ Aktif"
+
 @bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    bot.reply_to(message, "🤖 Bot aktif!\nKirimkan mint address token Solana untuk mulai analisa.")
+def welcome(message):
+    bot.reply_to(message, "🤖 Bot analisa aktif!\nKirimkan mint address token Solana.")
 
 @bot.message_handler(func=lambda m: True)
-def handle_message(message):
+def handle_mint(message):
     mint = message.text.strip()
-    if len(mint) >= 32:
-        bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
+    if len(mint) < 32:
+        bot.send_message(message.chat.id, "❌ Format mint tidak valid.")
+        return
 
-        supply = get_token_supply(mint)
-        if supply == -1:
-            bot.send_message(message.chat.id, "❌ Gagal mengambil total supply.")
-        else:
-            reply = (
-                f"📦 Total Supply: {supply}\n"
-                f"📎 [Dexscreener](https://dexscreener.com/solana/{mint})\n"
-                f"📎 [Pump.fun](https://pump.fun/{mint})"
-            )
-            bot.send_message(message.chat.id, reply, parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
+
+    # Total supply
+    supply = get_token_supply(mint)
+    supply_text = f"{supply:,}" if supply != -1 else "N/A"
+
+    # Dexscreener data
+    dex = get_token_dex_data(mint)
+    if dex:
+        status = interpret_status(dex["vol_5m"], dex["liquidity"])
+        reply = (
+            f"📦 Total Supply: {supply_text}\n"
+            f"💧 Liquidity: ${dex['liquidity']:,}\n"
+            f"📈 Volume (5m): ${dex['vol_5m']:,} → {status}\n"
+            f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
+            f"📉 Volume (24h): ${dex['vol_24h']:,}\n\n"
+            f"📎 [Dexscreener]({dex['dex_url']})\n"
+            f"📎 [Pump.fun](https://pump.fun/{mint})"
+        )
     else:
-        bot.reply_to(message, "❌ Format mint tidak valid.")
+        reply = (
+            f"📦 Total Supply: {supply_text}\n"
+            f"⚠️ Gagal mengambil data volume dari Dexscreener.\n\n"
+            f"📎 [Pump.fun](https://pump.fun/{mint})"
+        )
+
+    bot.send_message(message.chat.id, reply, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot siap menerima perintah...")
+    print("Bot siap analisa...")
     bot.polling(none_stop=True)
