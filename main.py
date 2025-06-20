@@ -5,27 +5,26 @@ import telebot
 TOKEN_TELEGRAM = os.getenv("TOKEN_TELEGRAM")
 USER_ID = os.getenv("USER_ID")
 
-# Cek apakah variabel sudah diisi
+# Validasi sebelum lanjut
 if not TOKEN_TELEGRAM or not USER_ID:
     print("❌ Environment variable TOKEN_TELEGRAM atau USER_ID belum di-set.")
     exit()
 
-USER_ID = int(USER_ID)
+# Buat objek bot
 bot = telebot.TeleBot(TOKEN_TELEGRAM)
+USER_ID = int(USER_ID)
 
-# Pesan awal saat bot aktif
+# Kirim pesan saat bot aktif
 bot.send_message(USER_ID, "✅ Bot Railway aktif!\nKirimkan mint address token untuk mulai analisa.")
 print("Bot sudah berjalan dan siap menerima pesan.")
 
-# Fungsi ketika user kirim pesan
-@bot.message_handler(func=lambda message: True)
-def tangani_pesan(message):
-    mint = message.text.strip()
+# Handler untuk pesan masuk
+@bot.message_handler(func=lambda msg: True)
+def handle_message(msg):
+    mint = msg.text.strip()
     if len(mint) > 20:
-        bot.send_message(USER_ID, f"🔍 Menerima mint address:\n`{mint}`", parse_mode="Markdown")
-        # Placeholder logika lanjutan bisa ditaruh di sini
+        bot.send_message(USER_ID, f"🧠 Menerima mint address:\n`{mint}`", parse_mode="Markdown")
     else:
         bot.send_message(USER_ID, "⚠️ Format mint address tidak valid.")
 
-# Jalankan polling
 bot.polling(none_stop=True)
