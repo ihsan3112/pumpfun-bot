@@ -3,11 +3,11 @@ import time
 import datetime
 import telebot
 
-TOKEN_TELEGRAM = "7304825429:AAFkU5nZ4...g3c9JP0Bs"  # Ganti dengan token kamu
-USER_ID = 7806614019  # Ganti dengan ID kamu
+# Ganti token dan ID kamu di sini
+TOKEN_TELEGRAM = "7304825429:AAFkU5nZ4g7g1b1dCJdTaQFZn0hw3c9JP0Bs"
+USER_ID = 7806614019
 
 bot = telebot.TeleBot(TOKEN_TELEGRAM)
-
 RPC_URL = "https://api.mainnet-beta.solana.com"
 
 def get_transactions(mint_address):
@@ -25,9 +25,9 @@ def get_transactions(mint_address):
 
 def analisa_token(mint_address):
     hasil = []
-    bot.send_message(USER_ID, f"🔍 Memulai analisa token:\n`{mint_address}`", parse_mode="Markdown")
+    bot.send_message(USER_ID, f"🔍 Memulai analisa token: `{mint_address}`", parse_mode="Markdown")
 
-    for i in range(10):
+    for i in range(10):  # total 5 menit (10 x 30 detik)
         tx = get_transactions(mint_address)
         hasil.append(len(tx))
         print(f"🕓 {datetime.datetime.now().strftime('%H:%M:%S')} - Jumlah transaksi: {len(tx)}")
@@ -35,26 +35,14 @@ def analisa_token(mint_address):
 
     penurunan = 0
     for i in range(1, len(hasil)):
-        if hasil[i] <= hasil[i-1]:
+        if hasil[i] <= hasil[i - 1]:
             penurunan += 1
 
-    kesimpulan = "✅ Token kemungkinan AKAN BERTAHAN" if penurunan <= 3 else "⚠️ Token kemungkinan MATI dalam 15 menit"
-
-    bot.send_message(USER_ID,
-        f"📊 Hasil analisa token:\nTotal pengamatan: 5 menit\nPenurunan aktivitas: {penurunan} dari 9\n\n{kesimpulan}"
+    pesan = (
+        f"📊 *Hasil Analisa:*\n"
+        f"Total transaksi dalam 5 menit: `{hasil[-1]}`\n"
+        f"Penurunan aktivitas sebanyak `{penurunan}` dari 9 interval\n\n"
     )
 
-@bot.message_handler(commands=['start'])
-def kirim_sambutan(message):
-    bot.send_message(message.chat.id, "Halo! Kirim perintah: `/analisa <mint_address>`", parse_mode="Markdown")
-
-@bot.message_handler(commands=['analisa'])
-def tangani_analisa(message):
-    try:
-        mint = message.text.split(" ")[1]
-        analisa_token(mint)
-    except:
-        bot.send_message(message.chat.id, "❗ Format salah. Contoh:\n`/analisa 7kGx...`", parse_mode="Markdown")
-
-print("🤖 Bot Railway telah dimulai...")
-bot.polling()
+    if penurunan >= 7:
+        pesan += "⚠️ *Kesimpulan:* Tok
