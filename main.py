@@ -2,6 +2,7 @@ import os
 import telebot
 import requests
 import json
+from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -42,7 +43,8 @@ def get_token_dex_data(mint):
                         "txns": pair["txns"]["m5"],
                         "buy_ratio": pair["txns"]["m5"] and (pair["txns"].get("m5_buy", 0) / max(pair["txns"]["m5"], 1)) * 100,
                         "holders": pair.get("holders", 0),
-                        "dex_url": pair["url"]
+                        "dex_url": pair["url"],
+                        "created_at": pair.get("pairCreatedAt", 0)
                     }
     except:
         pass
@@ -52,18 +54,38 @@ def get_token_dex_data(mint):
 def analisa_status(dex):
     v5 = dex['vol_5m']
     v1 = dex['vol_1h']
+    v24 = dex['vol_24h']
     liq = dex['liquidity']
     txns = dex['txns']
     buy_ratio = dex['buy_ratio']
 
-    if v5 == 0 and liq < 100:
-        return "❌ Sangat Berisiko: Mati suri dan liquidity sangat rendah"
-    elif v5 < 0.01 * v1 or liq < 300:
-        return "⚠️ Waspada: Aktivitas menurun atau liquidity tipis"
-    elif txns > 5 and buy_ratio > 60 and liq > 1000:
-        return "✅ Stabil: Token aktif, volume sehat, dan dominan pembelian"
+    created = datetime.fromtimestamp(dex['created_at'] / 1000)
+    now = datetime.utcnow()
+    age_minutes = (now - created).total_seconds() / 60
+
+    if age_minutes < 10:
+        if v5 > 500 and buy_ratio > 70:
+            return "🚀 Token baru dengan volume tinggi dan dominan dibeli"
+        elif v5 < 100:
+            return "⚠️ Token baru tapi volume sangat rendah"
+        else:
+            return "🔎 Token baru, butuh observasi lebih lanjut"
+
+    elif age_minutes < 60:
+        if v5 < 0.1 * v1:
+            return "⚠️ Aktivitas melambat dibanding 1 jam terakhir"
+        elif buy_ratio > 60 and txns > 10:
+            return "✅ Aktif: Transaksi sehat dan dominan pembelian"
+        else:
+            return "🔍 Stabil tapi tidak dominan beli"
+
     else:
-        return "🔎 Belum jelas: Perlu observasi lanjutan"
+        if v5 < 0.05 * v24 and liq < 300:
+            return "❌ Mati suri: volume 5m kecil dibanding 24 jam dan likuiditas tipis"
+        elif buy_ratio < 40:
+            return "⚠️ Dominan penjualan, kemungkinan akan dump"
+        else:
+            return "✅ Stabil: Volume, likuiditas dan tren pembelian masih kuat"
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -89,26 +111,3 @@ def handle_mint(message):
         reply = (
             f"📦 Total Supply: {supply_text}\n"
             f"💧 Liquidity: ${dex['liquidity']:,}\n"
-            f"📈 Volume (5m): ${dex['vol_5m']:,}\n"
-            f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
-            f"📉 Volume (24h): ${dex['vol_24h']:,}\n"
-            f"🔁 Transaksi (5m): {dex['txns']} | Buy Ratio: {dex['buy_ratio']:.1f}%\n"
-            f"👥 Holder: {dex['holders']}\n\n"
-            f"🔍 *Analisa:* {prediksi}\n\n"
-            f"📎 [Dexscreener]({dex['dex_url']})\n"
-            f"📎 [Pump.fun](https://pump.fun/{mint})"
-        )
-    else:
-        reply = (
-            f"📦 Total Supply: {supply_text}\n"
-            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
-            f"📎 [Pump.fun](https://pump.fun/{mint})"
-        )
-
-    bot.send_message(message.chat.id, reply, parse_mode="Markdown")
-
-
-if __name__ == "__main__":
-    print("Bot aktif dengan analisa cerdas...")
-    bot.polling(none_stop=True)
-    
