@@ -2,8 +2,8 @@ import os
 import requests
 from telebot import TeleBot
 from telebot.types import Message
+from datetime import datetime
 
-# Ambil token dan user ID dari variabel environment (Railway)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 USER_ID = os.getenv("USER_ID")
 
@@ -12,61 +12,62 @@ bot = TeleBot(BOT_TOKEN)
 def format_number(n):
     return "{:,}".format(n)
 
-def analyze_volume(volumes):
-    v5, v1h, v24h = volumes
-    if v5 > 0 and v1h > 0 and v24h > 0:
+def analyze_volume(v5, v1h, v24h, token_age_minute):
+    if token_age_minute < 5:
+        return "⏳ Token terlalu baru, belum cukup data volume."
+    elif token_age_minute < 60:
         if v5 < v1h / 10:
-            return "⚠️ Volume 5m sangat kecil dibanding 1h → kemungkinan token melambat"
+            return "⚠️ Volume 5m kecil dibanding 1h → token melambat"
         elif v1h < v24h / 10:
-            return "⚠️ Aktivitas 1 jam rendah dibanding 24 jam → momentum mungkin hilang"
+            return "⚠️ Aktivitas 1 jam rendah dibanding 24 jam → momentum menurun"
         else:
             return "✅ Stabil: Token masih aktif dan volume sehat"
-    return "⚠️ Volume sangat rendah → token mungkin tidak aktif"
+    else:
+        if v1h < v24h / 15:
+            return "⚠️ Aktivitas jam ini menurun → token mulai ditinggal"
+        else:
+            return "✅ Volume tetap stabil > 1 jam"
 
 @bot.message_handler(func=lambda m: True)
 def handle_message(message: Message):
     mint = message.text.strip()
-    
     if not mint or len(mint) < 32:
         bot.send_message(message.chat.id, "❌ Mint tidak valid atau terlalu pendek.")
         return
 
-    bot.send_message(message.chat.id, f"🧠 Menerima mint:\n`{mint}`", parse_mode="Markdown")
-
     url = f"https://api.dexscreener.com/latest/dex/pairs/solana/{mint}"
-    response = requests.get(url)
+    try:
+        res = requests.get(url, timeout=10).json()
+        pair = res.get("pair")
+        if not pair:
+            bot.send_message(message.chat.id, "⚠️ Token belum muncul di Dexscreener.")
+            return
 
-    if response.status_code != 200:
-        bot.send_message(message.chat.id, "❌ Gagal mengambil data dari Dexscreener.")
-        return
+        name = pair.get("baseToken", {}).get("name", "-")
+        supply = pair.get("baseToken", {}).get("totalSupply", "???")
+        link = pair.get("url")
+        liq = pair.get("liquidity", {}).get("usd", 0)
+        vol_5m = pair.get("volume", {}).get("m5", 0)
+        vol_1h = pair.get("volume", {}).get("h1", 0)
+        vol_24h = pair.get("volume", {}).get("h24", 0)
+        created_ms = pair.get("pairCreatedAt", 0)
+        age_min = (datetime.now() - datetime.fromtimestamp(created_ms / 1000)).seconds // 60
 
-    data = response.json()
+        analysis = analyze_volume(vol_5m, vol_1h, vol_24h, age_min)
+        msg = (
+            f"📦 *{name}*\n"
+            f"💧 Liquidity: ${format_number(int(liq))}\n"
+            f"⏱️ Age: {age_min} menit\n"
+            f"📊 Vol 5m: ${format_number(int(vol_5m))}\n"
+            f"📊 Vol 1h: ${format_number(int(vol_1h))}\n"
+            f"📊 Vol 24h: ${format_number(int(vol_24h))}\n"
+            f"\n🧠 Analisa: {analysis}\n\n"
+            f"[🔗 Dexscreener]({link})"
+        )
+        bot.send_message(message.chat.id, msg, parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ Gagal mengambil data: {e}")
 
-    if "pair" not in data:
-        bot.send_message(message.chat.id, "⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)")
-        return
-
-    pair = data["pair"]
-    supply = pair.get("totalSupply", 0)
-    liquidity = pair.get("liquidity", {}).get("usd", 0)
-    vol5m = pair.get("volume", {}).get("m5", 0)
-    vol1h = pair.get("volume", {}).get("h1", 0)
-    vol24h = pair.get("volume", {}).get("h24", 0)
-    url = pair.get("url", "")
-
-    status = analyze_volume((vol5m, vol1h, vol24h))
-
-    reply = (
-        f"📦 Total Supply: {format_number(int(supply))}\n"
-        f"💧 Liquidity: ${format_number(int(liquidity))}\n"
-        f"📊 Volume (5m): ${format_number(int(vol5m))}\n"
-        f"📊 Volume (1h): ${format_number(int(vol1h))}\n"
-        f"📊 Volume (24h): ${format_number(int(vol24h))}\n"
-        f"🧠 Analisa: {status}\n\n"
-        f"[🔗 Dexscreener]({url})"
-    )
-
-    bot.send_message(message.chat.id, reply, parse_mode="Markdown")
-
-print("Bot siap menerima perintah...")
-bot.infinity_polling()
+if __name__ == "__main__":
+    print("Bot siap menerima perintah...")
+    bot.infinity_polling()
