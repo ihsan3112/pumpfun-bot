@@ -7,7 +7,6 @@ from datetime import datetime
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-
 def get_token_supply(mint):
     try:
         url = "https://api.mainnet-beta.solana.com"
@@ -25,7 +24,6 @@ def get_token_supply(mint):
     except:
         pass
     return -1
-
 
 def get_token_dex_data(mint):
     try:
@@ -49,7 +47,6 @@ def get_token_dex_data(mint):
     except:
         pass
     return None
-
 
 def analisa_status(dex):
     v5 = dex['vol_5m']
@@ -87,11 +84,9 @@ def analisa_status(dex):
         else:
             return "✅ Stabil: Volume, likuiditas dan tren pembelian masih kuat"
 
-
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
     bot.reply_to(message, "🤖 Kirim mint address token Solana untuk analisa lengkap dan prediksi dump/bertahan.")
-
 
 @bot.message_handler(func=lambda m: True)
 def handle_mint(message):
@@ -111,3 +106,24 @@ def handle_mint(message):
         reply = (
             f"📦 Total Supply: {supply_text}\n"
             f"💧 Liquidity: ${dex['liquidity']:,}\n"
+            f"📈 Volume (5m): ${dex['vol_5m']:,}\n"
+            f"📊 Volume (1h): ${dex['vol_1h']:,}\n"
+            f"📉 Volume (24h): ${dex['vol_24h']:,}\n"
+            f"🔁 Transaksi (5m): {dex['txns']} | Buy Ratio: {dex['buy_ratio']:.1f}%\n"
+            f"👥 Holder: {dex['holders']}\n\n"
+            f"🔍 *Analisa:* {prediksi}\n\n"
+            f"📎 [Dexscreener]({dex['dex_url']})\n"
+            f"📎 [Pump.fun](https://pump.fun/{mint})"
+        )
+    else:
+        reply = (
+            f"📦 Total Supply: {supply_text}\n"
+            f"⚠️ Token belum muncul di Dexscreener (mungkin terlalu baru)\n\n"
+            f"📎 [Pump.fun](https://pump.fun/{mint})"
+        )
+
+    bot.send_message(message.chat.id, reply, parse_mode="Markdown")
+
+if __name__ == "__main__":
+    print("Bot aktif dengan analisa cerdas...")
+    bot.polling(none_stop=True)
